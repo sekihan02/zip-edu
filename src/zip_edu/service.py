@@ -38,7 +38,8 @@ def unpack_zip(zip_path: Path, output_dir: Path, progress: ProgressCallback | No
 def pack_zip(
     inputs: list[Path],
     output_zip: Path,
-    compression: str = "deflate",
+    compression: str = "deflate-auto",
+    use_data_descriptor: bool = False,
     progress: ProgressCallback | None = None,
 ) -> PackResult:
     files = _collect_input_files(inputs)
@@ -48,7 +49,7 @@ def pack_zip(
         progress(f"collect: {len(files)} files")
 
     total_input = sum(len(data) for _, data in files)
-    archive = build_zip(files, compression=compression)
+    archive = build_zip(files, compression=compression, use_data_descriptor=use_data_descriptor)
     output_zip.parent.mkdir(parents=True, exist_ok=True)
     output_zip.write_bytes(archive)
     if progress:
@@ -81,4 +82,3 @@ def _collect_input_files(inputs: list[Path]) -> list[tuple[str, bytes]]:
                 rel = f"{root_name}/{f.relative_to(p).as_posix()}"
             collected.append((rel, f.read_bytes()))
     return collected
-

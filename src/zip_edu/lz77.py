@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# RFC1951 limits used by DEFLATE.
 MIN_MATCH = 3
 MAX_MATCH = 258
 WINDOW_SIZE = 32768
@@ -222,4 +223,3 @@ def symbol_to_distance(symbol: int, extra_value: int) -> int:
     if not (0 <= symbol < len(DIST_BASE)):
         raise ValueError("invalid distance symbol")
     return DIST_BASE[symbol] + extra_value
-

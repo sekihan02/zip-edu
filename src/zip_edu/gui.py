@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QComboBox,
+    QCheckBox,
 )
 
 from .service import inspect_zip, pack_zip, unpack_zip
@@ -44,6 +45,7 @@ class ZipWorker(QThread):
                     self.payload["inputs"],
                     self.payload["output_zip"],
                     compression=self.payload["compression"],
+                    use_data_descriptor=self.payload["use_data_descriptor"],
                     progress=self.log.emit,
                 )
             elif self.mode == "unpack":
@@ -108,10 +110,16 @@ class MainWindow(QMainWindow):
         layout.addLayout(out_row)
 
         self.pack_method = QComboBox(self)
-        self.pack_method.addItem("Deflate (固定ハフマン)", "deflate")
+        self.pack_method.addItem("Deflate (自動選択)", "deflate-auto")
+        self.pack_method.addItem("Deflate (動的ハフマン)", "deflate-dynamic")
+        self.pack_method.addItem("Deflate (固定ハフマン)", "deflate-fixed")
+        self.pack_method.addItem("Deflate (非圧縮ブロック BTYPE=00)", "deflate-stored")
         self.pack_method.addItem("Store (無圧縮)", "store")
         layout.addWidget(QLabel("圧縮方式"))
         layout.addWidget(self.pack_method)
+
+        self.pack_data_descriptor = QCheckBox("データデスクリプタ(bit3)を使う", self)
+        layout.addWidget(self.pack_data_descriptor)
 
         self.btn_pack = QPushButton("ZIP 作成", self)
         layout.addWidget(self.btn_pack)
@@ -196,7 +204,12 @@ class MainWindow(QMainWindow):
             return
         self._start_worker(
             "pack",
-            {"inputs": inputs, "output_zip": Path(output), "compression": self.pack_method.currentData()},
+            {
+                "inputs": inputs,
+                "output_zip": Path(output),
+                "compression": self.pack_method.currentData(),
+                "use_data_descriptor": self.pack_data_descriptor.isChecked(),
+            },
         )
 
     def _on_unpack(self) -> None:
@@ -259,6 +272,7 @@ class MainWindow(QMainWindow):
             self.btn_add_dir,
             self.btn_clear_inputs,
             self.btn_pack_output,
+            self.pack_data_descriptor,
             self.btn_pack,
             self.btn_unpack_zip,
             self.btn_unpack_output,
@@ -280,4 +294,3 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-

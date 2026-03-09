@@ -73,10 +73,13 @@ class BitWriter:
             self._bit_buf = 0
             self._bit_count = 0
 
+    def write_bytes(self, data: bytes) -> None:
+        self.align_byte()
+        self._out.extend(data)
+
     def to_bytes(self) -> bytes:
         if self._bit_count > 0:
             self._out.append(self._bit_buf & 0xFF)
             self._bit_buf = 0
             self._bit_count = 0
         return bytes(self._out)
-

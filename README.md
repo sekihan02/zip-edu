@@ -17,7 +17,9 @@ PySide6 を使った学習用 ZIP 圧縮・解凍ツールです。
   - Deflate は `stored/fixed/dynamic` ブロックを解凍可能
 - ZIP 圧縮:
   - LZ77 をナイーブ実装
-  - Deflate は固定ハフマン (`BTYPE=01`) で圧縮
+  - Deflate は `dynamic(BTYPE=10)` / `fixed(BTYPE=01)` / `stored(BTYPE=00)` で圧縮可能
+  - `auto` では `dynamic/fixed/stored` のうち最短サイズを選択
+  - 必要に応じて `bit3` フラグ + データデスクリプタ（後置）で書き込み可能
   - ZIP コンテナ（ローカルヘッダ/中央ディレクトリ/EOCD）を手動生成
 - GUI:
   - PySide6 で圧縮、解凍、内容確認（inspect）
@@ -37,6 +39,7 @@ src/zip_edu/
   gui.py         # PySide6 GUI
 tests/
   test_deflate.py
+  test_lz77.py
   test_zip_format.py
 ```
 
@@ -67,11 +70,20 @@ zip-edu-gui
 ### CLI
 
 ```powershell
-# 圧縮 (Deflate固定ハフマン)
+# 圧縮 (Deflate自動選択: dynamic/fixed/stored の最短)
 zip-edu pack out.zip input_dir file1.txt
+
+# 圧縮 (Deflate動的ハフマンを強制)
+zip-edu pack out_dynamic.zip input_dir --deflate-mode dynamic
+
+# 圧縮 (Deflate非圧縮ブロック BTYPE=00 を強制)
+zip-edu pack out_stored_block.zip input_dir --deflate-mode stored
 
 # 無圧縮(Store)
 zip-edu pack --store out_store.zip input_dir
+
+# ローカルヘッダを後から確定させる方式 (bit3 + data descriptor)
+zip-edu pack out_dd.zip input_dir --deflate-mode auto --data-descriptor
 
 # 解凍
 zip-edu unpack in.zip -o out_dir
@@ -85,11 +97,14 @@ zip-edu explain-lz77 --text "abracadabra abracadabra"
 
 ## アルゴリズムの要点
 
-### 1. 圧縮 (Deflate固定ハフマン)
+### 1. 圧縮 (Deflate)
 
 1. 入力バイト列を LZ77 で `Literal` または `Match(length, distance)` に変換
 2. `Literal/Length` と `Distance` を Deflate のシンボルへ変換
-3. 固定ハフマン符号でビット列へエンコード
+3. モードに応じてブロックを生成
+   - `BTYPE=10`: 動的ハフマン（頻度から符号長を生成）
+   - `BTYPE=01`: 固定ハフマン
+   - `BTYPE=00`: 非圧縮ブロック
 4. ZIP の file data として格納
 
 ### 2. 解凍
@@ -105,6 +120,14 @@ zip-edu explain-lz77 --text "abracadabra abracadabra"
 - `Local File Header` + `Compressed Data` を各ファイル分連結
 - 末尾に `Central Directory` を構築
 - 最後に `EOCD` を付けて完成
+- 中央ディレクトリの `relative offset of local header` は、各ローカルヘッダの先頭位置を記録
+
+### 4. RFC準拠の主要制約（この実装）
+
+- LZ77 ウィンドウ: 32KiB（`WINDOW_SIZE=32768`）
+- マッチ長: 最短3・最長258（2バイトマッチは符号化しない）
+- 距離: 1..32768
+- Deflate 解凍は `stored/fixed/dynamic` の3方式を実装
 
 ## 実行ファイル (exe) の作成
 
@@ -138,6 +161,13 @@ pip install pytest
 pytest -q
 ```
 
+主なケース:
+
+- 自前 `fixed/dynamic/stored` 圧縮の往復
+- zlib が作る dynamic ブロックの解凍
+- data descriptor 付き ZIP の互換読み込み
+- 中央ディレクトリオフセット整合性
+
 ## リポジトリ作成とリリース
 
 ### 1. 初期化とコミット
@@ -169,4 +199,5 @@ gh release create v0.1.0 dist/zip-edu-gui.exe dist/zip-edu-cli.exe -t "v0.1.0" -
 ## 注意
 
 - 自学目的の実装であり、速度最適化はしていません（LZ77 はナイーブ探索）
+- 動的ハフマン生成は簡易実装のため、符号長制限に収まらない稀なケースでは固定ハフマンへフォールバックします
 - ZIP64 / 暗号化 / 一部拡張仕様は未対応です

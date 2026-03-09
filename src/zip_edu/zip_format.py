@@ -8,11 +8,12 @@ from pathlib import Path
 import struct
 
 from .crc32 import crc32
-from .deflate import compress_deflate_fixed, decompress_deflate
+from .deflate import compress_deflate, decompress_deflate
 
 LFH_SIG = 0x04034B50
 CDH_SIG = 0x02014B50
 EOCD_SIG = 0x06054B50
+DATA_DESCRIPTOR_SIG = 0x08074B50
 
 
 @dataclass(slots=True)
@@ -77,6 +78,8 @@ def parse_central_directory(data: bytes) -> list[ZipEntryInfo]:
         if sig != CDH_SIG:
             raise ValueError("invalid central directory signature")
         pos += 46
+        if pos + file_name_len + extra_len + comment_len > len(data):
+            raise ValueError("truncated central directory variable fields")
         file_name = data[pos : pos + file_name_len]
         pos += file_name_len
         pos += extra_len
@@ -128,6 +131,8 @@ def extract_all(data: bytes, output_dir: Path) -> list[ZipExtractedFile]:
             raise ValueError(f"invalid local header signature for {entry.name}")
 
         data_start = local_pos + 30 + file_name_len + extra_len
+        if data_start > len(data):
+            raise ValueError(f"truncated local header fields for {entry.name}")
         data_end = data_start + entry.compressed_size
         if data_end > len(data):
             raise ValueError(f"truncated file data for {entry.name}")
@@ -152,9 +157,13 @@ def extract_all(data: bytes, output_dir: Path) -> list[ZipExtractedFile]:
     return result
 
 
-def build_zip(entries: list[tuple[str, bytes]], compression: str = "deflate") -> bytes:
+def build_zip(
+    entries: list[tuple[str, bytes]],
+    compression: str = "deflate-auto",
+    use_data_descriptor: bool = False,
+) -> bytes:
     zip_data = bytearray()
-    central_records: list[tuple[int, int, int, int, int, int, bytes]] = []
+    central_records: list[tuple[int, int, int, int, int, int, int, bytes]] = []
     mod_time, mod_date = _dos_datetime(datetime.now())
 
     for arc_name, raw_data in entries:
@@ -164,47 +173,58 @@ def build_zip(entries: list[tuple[str, bytes]], compression: str = "deflate") ->
         name_bytes = normalized_name.encode("utf-8")
         flags = 0x0800  # UTF-8 names
 
-        if compression == "deflate":
-            method = 8
-            comp_data = compress_deflate_fixed(raw_data)
-        elif compression == "store":
-            method = 0
-            comp_data = raw_data
-        else:
-            raise ValueError("compression must be 'deflate' or 'store'")
+        method, comp_data = _compress_data(raw_data, compression)
+        version_needed = 20 if method == 8 or use_data_descriptor else 10
+        if use_data_descriptor:
+            flags |= 0x0008
 
         crc = crc32(raw_data)
         local_offset = len(zip_data)
+        local_crc = 0 if use_data_descriptor else crc
+        local_comp_size = 0 if use_data_descriptor else len(comp_data)
+        local_uncomp_size = 0 if use_data_descriptor else len(raw_data)
         zip_data.extend(
             struct.pack(
                 "<IHHHHHIIIHH",
                 LFH_SIG,
-                20,  # version needed
+                version_needed,
                 flags,
                 method,
                 mod_time,
                 mod_date,
-                crc,
-                len(comp_data),
-                len(raw_data),
+                local_crc,
+                local_comp_size,
+                local_uncomp_size,
                 len(name_bytes),
                 0,  # extra length
             )
         )
         zip_data.extend(name_bytes)
         zip_data.extend(comp_data)
+        if use_data_descriptor:
+            zip_data.extend(
+                struct.pack(
+                    "<IIII",
+                    DATA_DESCRIPTOR_SIG,
+                    crc,
+                    len(comp_data),
+                    len(raw_data),
+                )
+            )
 
-        central_records.append((flags, method, crc, len(comp_data), len(raw_data), local_offset, name_bytes))
+        central_records.append(
+            (version_needed, flags, method, crc, len(comp_data), len(raw_data), local_offset, name_bytes)
+        )
 
     central_offset = len(zip_data)
     entry_count = len(central_records)
-    for flags, method, crc, comp_size, uncomp_size, local_offset, name_bytes in central_records:
+    for version_needed, flags, method, crc, comp_size, uncomp_size, local_offset, name_bytes in central_records:
         zip_data.extend(
             struct.pack(
                 "<IHHHHHHIIIHHHHHII",
                 CDH_SIG,
                 0x0314,  # version made by (UNIX, 2.0)
-                20,  # version needed
+                version_needed,
                 flags,
                 method,
                 mod_time,
@@ -238,6 +258,22 @@ def build_zip(entries: list[tuple[str, bytes]], compression: str = "deflate") ->
         )
     )
     return bytes(zip_data)
+
+
+def _compress_data(raw_data: bytes, compression: str) -> tuple[int, bytes]:
+    if compression in {"deflate", "deflate-fixed"}:
+        return 8, compress_deflate(raw_data, mode="fixed")
+    if compression == "deflate-dynamic":
+        return 8, compress_deflate(raw_data, mode="dynamic")
+    if compression == "deflate-stored":
+        return 8, compress_deflate(raw_data, mode="stored")
+    if compression == "deflate-auto":
+        return 8, compress_deflate(raw_data, mode="auto")
+    if compression == "store":
+        return 0, raw_data
+    raise ValueError(
+        "compression must be one of: store, deflate-fixed, deflate-dynamic, deflate-stored, deflate-auto"
+    )
 
 
 def _normalize_arc_name(name: str) -> str:

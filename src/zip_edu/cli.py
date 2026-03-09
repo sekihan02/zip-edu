@@ -17,6 +17,17 @@ def main() -> None:
     p_pack.add_argument("output_zip", type=Path, help="Output ZIP path")
     p_pack.add_argument("inputs", nargs="+", type=Path, help="Input files or directories")
     p_pack.add_argument("--store", action="store_true", help="Use ZIP Store method (no Deflate)")
+    p_pack.add_argument(
+        "--deflate-mode",
+        choices=["auto", "dynamic", "fixed", "stored"],
+        default="auto",
+        help="Deflate block mode (ignored with --store)",
+    )
+    p_pack.add_argument(
+        "--data-descriptor",
+        action="store_true",
+        help="Write local header with bit3 flag and trailing data descriptor",
+    )
 
     p_unpack = sub.add_parser("unpack", help="Extract a ZIP archive")
     p_unpack.add_argument("zip_path", type=Path, help="Input ZIP path")
@@ -34,8 +45,14 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "pack":
-        compression = "store" if args.store else "deflate"
-        result = pack_zip(args.inputs, args.output_zip, compression=compression, progress=print)
+        compression = "store" if args.store else f"deflate-{args.deflate_mode}"
+        result = pack_zip(
+            args.inputs,
+            args.output_zip,
+            compression=compression,
+            use_data_descriptor=args.data_descriptor,
+            progress=print,
+        )
         ratio = 0.0
         if result.total_input_bytes > 0:
             ratio = result.total_zip_bytes / result.total_input_bytes
