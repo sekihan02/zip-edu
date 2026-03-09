@@ -1,6 +1,6 @@
 # zip-edu
 
-PySide6 を使った学習用 ZIP 圧縮・解凍ツールです。  
+PySide6 を使った学習用 ZIP 圧縮・解凍ツールです。
 `zipfile` / `zlib` に頼らず、ZIP コンテナと Deflate をコードで追えるように実装しています。
 
 ## 目的
@@ -87,17 +87,17 @@ zip-edu explain-lz77 --text "abracadabra abracadabra"
 
 ### 1. 圧縮 (Deflate固定ハフマン)
 
-1. 入力バイト列を LZ77 で `Literal` または `Match(length, distance)` に変換  
-2. `Literal/Length` と `Distance` を Deflate のシンボルへ変換  
-3. 固定ハフマン符号でビット列へエンコード  
+1. 入力バイト列を LZ77 で `Literal` または `Match(length, distance)` に変換
+2. `Literal/Length` と `Distance` を Deflate のシンボルへ変換
+3. 固定ハフマン符号でビット列へエンコード
 4. ZIP の file data として格納
 
 ### 2. 解凍
 
-1. ZIP の中央ディレクトリを読み、各エントリ情報を取得  
-2. file data を取り出し、圧縮方式に応じて復号  
-   - `Store`: 生データ  
-   - `Deflate`: ブロックヘッダ(`BFINAL`,`BTYPE`)ごとに復号  
+1. ZIP の中央ディレクトリを読み、各エントリ情報を取得
+2. file data を取り出し、圧縮方式に応じて復号
+   - `Store`: 生データ
+   - `Deflate`: ブロックヘッダ(`BFINAL`,`BTYPE`)ごとに復号
 3. CRC32 とサイズを検証して書き出し
 
 ### 3. ZIP コンテナ
@@ -168,6 +168,5 @@ gh release create v0.1.0 dist/zip-edu-gui.exe dist/zip-edu-cli.exe -t "v0.1.0" -
 
 ## 注意
 
-- 教育目的の実装であり、速度最適化はしていません（LZ77 はナイーブ探索）
+- 自学目的の実装であり、速度最適化はしていません（LZ77 はナイーブ探索）
 - ZIP64 / 暗号化 / 一部拡張仕様は未対応です
-
