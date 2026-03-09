@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zip-edu"
+version = "0.1.0"
+description = "Educational ZIP compressor/decompressor with a PySide6 GUI"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "zip-edu contributors" }]
+dependencies = [
+  "PySide6>=6.7,<7",
+]
+
+[project.scripts]
+zip-edu = "zip_edu.cli:main"
+zip-edu-gui = "zip_edu.gui:run"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
