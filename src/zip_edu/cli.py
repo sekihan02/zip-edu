@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .explain import explain_lz77
+from .explain import explain_deflate, explain_lz77, explain_zip_archive
 from .service import inspect_zip, pack_zip, unpack_zip
 
 
@@ -41,6 +41,15 @@ def main() -> None:
     g.add_argument("--text", type=str, help="Input text")
     g.add_argument("--file", type=Path, help="Input file")
     p_explain.add_argument("--limit", type=int, default=120, help="Max token lines")
+
+    p_explain_deflate = sub.add_parser("explain-deflate", help="Show DEFLATE stages")
+    g = p_explain_deflate.add_mutually_exclusive_group(required=True)
+    g.add_argument("--text", type=str, help="Input text")
+    g.add_argument("--file", type=Path, help="Input file")
+    p_explain_deflate.add_argument("--limit", type=int, default=40, help="Max LZ77 preview lines")
+
+    p_explain_zip = sub.add_parser("explain-zip", help="Show ZIP container structure")
+    p_explain_zip.add_argument("zip_path", type=Path, help="Input ZIP path")
 
     args = parser.parse_args()
 
@@ -79,6 +88,16 @@ def main() -> None:
         else:
             src = args.file.read_bytes()
         for line in explain_lz77(src, limit=args.limit):
+            print(line)
+    elif args.command == "explain-deflate":
+        if args.text is not None:
+            src = args.text.encode("utf-8")
+        else:
+            src = args.file.read_bytes()
+        for line in explain_deflate(src, limit=args.limit):
+            print(line)
+    elif args.command == "explain-zip":
+        for line in explain_zip_archive(args.zip_path.read_bytes()):
             print(line)
 
 

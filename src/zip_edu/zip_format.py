@@ -35,7 +35,7 @@ class ZipExtractedFile:
 
 
 def parse_central_directory(data: bytes) -> list[ZipEntryInfo]:
-    eocd_offset = _find_eocd_offset(data)
+    eocd_offset = find_eocd_offset(data)
     (
         _sig,
         _disk_no,
@@ -287,7 +287,7 @@ def _decode_name(name_bytes: bytes, flag: int) -> str:
     return name_bytes.decode("cp437")
 
 
-def _find_eocd_offset(data: bytes) -> int:
+def find_eocd_offset(data: bytes) -> int:
     min_pos = max(0, len(data) - 65557)
     sig = struct.pack("<I", EOCD_SIG)
     for pos in range(len(data) - 22, min_pos - 1, -1):

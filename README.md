@@ -1,28 +1,58 @@
 # zip-edu
 
-PySide6 を使った学習用 ZIP 圧縮・解凍ツールです。
-`zipfile` / `zlib` に頼らず、ZIP コンテナと Deflate をコードで追えるように実装しています。
+ZIP の仕組みを理解するための学習用プロジェクトです。
+圧縮・解凍のコアロジックは `zipfile` / `zlib` に頼らず、自前実装で ZIP コンテナと Deflate を追えるようにしています。
+GUI は任意機能で、コア部分はサードパーティ依存なしで読める構成に整理しています。
 
-## 目的
+## このコードで ZIP の仕組みを理解できるか
 
-- ZIP の構造（ローカルヘッダ、中央ディレクトリ、EOCD）を理解する
-- Deflate の構造（LZ77 + Huffman）を理解する
-- GUI から圧縮/解凍を試しながらアルゴリズムを確認する
+現状のコードは、理解目的の構成として成立するように整理してあります。見る順番は次の通りです。
+
+- `src/zip_edu/bitstream.py`
+  - Deflate のビット単位入出力
+- `src/zip_edu/lz77.py`
+  - LZ77 のトークン化
+- `src/zip_edu/huffman.py`
+  - 正準ハフマン符号の生成と復号
+- `src/zip_edu/deflate.py`
+  - `stored / fixed / dynamic` ブロックの圧縮と解凍
+- `src/zip_edu/zip_format.py`
+  - ローカルヘッダ、中央ディレクトリ、EOCD の生成と解析
+- `src/zip_edu/explain.py`
+  - 学習用の説明出力
+
+特に以下のコマンドで「途中段階」を追えます。
+
+- `zip-edu explain-lz77`
+  - LZ77 のトークン列を見る
+- `zip-edu explain-deflate`
+  - トークン数、各 Deflate モードのサイズ、`auto` の選択結果を見る
+- `zip-edu explain-zip`
+  - EOCD、中央ディレクトリ、各ローカルヘッダの位置を見る
+
+補足:
+
+- テストでは互換性確認のために `zipfile` / `zlib` を使っています
+- コアロジック `bitstream / lz77 / huffman / deflate / zip_format` では圧縮ライブラリを使っていません
 
 ## 実装範囲
 
-- ZIP 展開:
+- ZIP 展開
   - ZIP コンテナの手動パース
-  - 圧縮方式 `Store(0)` / `Deflate(8)` をサポート
-  - Deflate は `stored/fixed/dynamic` ブロックを解凍可能
-- ZIP 圧縮:
+  - `Store(0)` / `Deflate(8)` をサポート
+  - Deflate は `stored / fixed / dynamic` を解凍可能
+- ZIP 圧縮
   - LZ77 をナイーブ実装
   - Deflate は `dynamic(BTYPE=10)` / `fixed(BTYPE=01)` / `stored(BTYPE=00)` で圧縮可能
-  - `auto` では `dynamic/fixed/stored` のうち最短サイズを選択
-  - 必要に応じて `bit3` フラグ + データデスクリプタ（後置）で書き込み可能
-  - ZIP コンテナ（ローカルヘッダ/中央ディレクトリ/EOCD）を手動生成
-- GUI:
-  - PySide6 で圧縮、解凍、内容確認（inspect）
+  - `auto` では `dynamic / fixed / stored` のうち最短を選択
+  - `bit3` フラグ + データデスクリプタにも対応
+  - ZIP コンテナを手動生成
+- 学習支援
+  - LZ77 プレビュー
+  - Deflate モード比較
+  - ZIP コンテナ構造の説明出力
+- GUI
+  - PySide6 ベースの圧縮・解凍・内容確認
 
 ## ディレクトリ構成
 
@@ -34,55 +64,57 @@ src/zip_edu/
   deflate.py     # Deflate 圧縮/解凍
   crc32.py       # CRC32
   zip_format.py  # ZIP コンテナの生成/解析
+  explain.py     # 学習用の説明出力
   service.py     # pack/unpack/inspect の高レベル API
   cli.py         # CUI
   gui.py         # PySide6 GUI
+  pyinstaller_entry_cli.py  # PyInstaller 用 CLI ラッパー
+  pyinstaller_entry_gui.py  # PyInstaller 用 GUI ラッパー
 tests/
-  test_deflate.py
-  test_lz77.py
-  test_zip_format.py
+scripts/
+  build_windows_exe.ps1
 ```
 
 ## セットアップ
 
+### コアのみ
+
 ```powershell
-# Python 3.11+ を想定
-python -m venv .venv
-. .venv/Scripts/Activate.ps1
-pip install -U pip
-pip install -e .
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+python -m pip install -e .
 ```
+
+### GUI も使う
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+python -m pip install -e ".[gui]"
+```
+
+`py -3.13` は例です。Python 3.11 以上があれば `3.11` / `3.12` / `3.13` のいずれでも構いません。
 
 ## 使い方
-
-### GUI
-
-```powershell
-python -m zip_edu.gui
-```
-
-またはエントリポイント:
-
-```powershell
-zip-edu-gui
-```
 
 ### CLI
 
 ```powershell
-# 圧縮 (Deflate自動選択: dynamic/fixed/stored の最短)
+# 圧縮
 zip-edu pack out.zip input_dir file1.txt
 
-# 圧縮 (Deflate動的ハフマンを強制)
+# 動的ハフマンを強制
 zip-edu pack out_dynamic.zip input_dir --deflate-mode dynamic
 
-# 圧縮 (Deflate非圧縮ブロック BTYPE=00 を強制)
+# Deflate の非圧縮ブロックを強制
 zip-edu pack out_stored_block.zip input_dir --deflate-mode stored
 
-# 無圧縮(Store)
+# ZIP Store
 zip-edu pack --store out_store.zip input_dir
 
-# ローカルヘッダを後から確定させる方式 (bit3 + data descriptor)
+# bit3 + data descriptor
 zip-edu pack out_dd.zip input_dir --deflate-mode auto --data-descriptor
 
 # 解凍
@@ -91,85 +123,100 @@ zip-edu unpack in.zip -o out_dir
 # 内容確認
 zip-edu inspect in.zip
 
-# LZ77 トークン化の学習表示
+# LZ77 の途中結果を見る
 zip-edu explain-lz77 --text "abracadabra abracadabra"
+
+# Deflate のモード比較を見る
+zip-edu explain-deflate --text "abracadabra abracadabra"
+
+# ZIP コンテナ構造を見る
+zip-edu explain-zip out.zip
 ```
 
-## アルゴリズムの要点
+### GUI
 
-### 1. 圧縮 (Deflate)
+```powershell
+zip-edu-gui
+```
 
-1. 入力バイト列を LZ77 で `Literal` または `Match(length, distance)` に変換
-2. `Literal/Length` と `Distance` を Deflate のシンボルへ変換
-3. モードに応じてブロックを生成
-   - `BTYPE=10`: 動的ハフマン（頻度から符号長を生成）
-   - `BTYPE=01`: 固定ハフマン
-   - `BTYPE=00`: 非圧縮ブロック
-4. ZIP の file data として格納
+PySide6 を入れていない状態で `zip-edu-gui` を実行すると、GUI extra のインストール方法を表示して終了します。
+
+## アルゴリズムの流れ
+
+### 1. 圧縮
+
+1. 入力バイト列を LZ77 で `Literal` / `Match(length, distance)` に分解
+2. `Literal/Length` と `Distance` を Deflate シンボルへ変換
+3. `stored / fixed / dynamic` のいずれかで Deflate ブロックを生成
+4. 生成した Deflate データを ZIP の file data に格納
+5. 最後に中央ディレクトリと EOCD を付与
 
 ### 2. 解凍
 
-1. ZIP の中央ディレクトリを読み、各エントリ情報を取得
-2. file data を取り出し、圧縮方式に応じて復号
-   - `Store`: 生データ
-   - `Deflate`: ブロックヘッダ(`BFINAL`,`BTYPE`)ごとに復号
-3. CRC32 とサイズを検証して書き出し
-
-### 3. ZIP コンテナ
-
-- `Local File Header` + `Compressed Data` を各ファイル分連結
-- 末尾に `Central Directory` を構築
-- 最後に `EOCD` を付けて完成
-- 中央ディレクトリの `relative offset of local header` は、各ローカルヘッダの先頭位置を記録
-
-### 4. RFC準拠の主要制約（この実装）
-
-- LZ77 ウィンドウ: 32KiB（`WINDOW_SIZE=32768`）
-- マッチ長: 最短3・最長258（2バイトマッチは符号化しない）
-- 距離: 1..32768
-- Deflate 解凍は `stored/fixed/dynamic` の3方式を実装
+1. EOCD を見つけて中央ディレクトリを読む
+2. 各エントリのローカルヘッダ位置をたどる
+3. `Store` ならそのまま、`Deflate` ならブロックを復号
+4. CRC32 とサイズを検証して出力
 
 ## 実行ファイル (exe) の作成
 
-PyInstaller を利用します。
+`.exe` の生成は Windows PowerShell で行ってください。
+WSL から操作している場合も、`.exe` ビルドだけは `powershell.exe` 側で実行するのが安全です。
+
+### 一番簡単な方法
+
+仮想環境の作成、依存導入、テスト、PyInstaller 実行までまとめて行います。
 
 ```powershell
-pip install pyinstaller
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1
+```
 
-# GUI exe
-python -m PyInstaller --noconfirm --onefile --windowed --name zip-edu-gui --paths src src/zip_edu/gui.py
+必要なら Python のバージョンや仮想環境を明示できます。
 
-# CLI exe
-python -m PyInstaller --noconfirm --onefile --console --name zip-edu-cli --paths src src/zip_edu/cli.py
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1 -PythonVersion 3.13 -RecreateVenv
 ```
 
 生成物:
 
-- `dist/zip-edu-gui.exe`
-- `dist/zip-edu-cli.exe`
+- `dist\zip-edu-cli.exe`
+- `dist\zip-edu-gui.exe`
 
-### exe 化の仕組み
+### 手動で行う場合
 
-- PyInstaller は Python 実行環境・依存モジュール・エントリスクリプトを解析
-- 必要ファイルをブートローダに同梱し、単一実行ファイルへ固める
-- 起動時に内部展開し、同梱された Python インタプリタで `gui.py` / `cli.py` を実行
+```powershell
+py -3.13 -m venv .venv-build
+.\.venv-build\Scripts\Activate.ps1
+python -m pip install -U pip
+python -m pip install -e ".[build]"
+python -m pytest -q
+python -m PyInstaller --clean --noconfirm --onefile --console --name zip-edu-cli --workpath build/pyi-cli --specpath build/spec --distpath dist --paths src src/pyinstaller_entry_cli.py
+python -m PyInstaller --clean --noconfirm --onefile --windowed --name zip-edu-gui --workpath build/pyi-gui --specpath build/spec --distpath dist --paths src src/pyinstaller_entry_gui.py
+```
+
+PowerShell の実行ポリシーで `Activate.ps1` が止まる場合:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
 
 ## テスト
 
 ```powershell
-pip install pytest
-pytest -q
+python -m pytest -q
 ```
 
-主なケース:
+主な確認内容:
 
-- 自前 `fixed/dynamic/stored` 圧縮の往復
-- zlib が作る dynamic ブロックの解凍
-- data descriptor 付き ZIP の互換読み込み
-- 中央ディレクトリオフセット整合性
+- 自前 `fixed / dynamic / stored` 圧縮の往復
+- `zlib` 互換の Deflate 復号
+- `zipfile` 互換の ZIP 読み書き
+- EOCD / 中央ディレクトリ / ローカルヘッダの整合性
+- コアロジックが圧縮ライブラリを import していないこと
 
 ## 注意
 
-- 自学目的の実装であり、速度最適化はしていません（LZ77 はナイーブ探索）
-- 動的ハフマン生成は簡易実装のため、符号長制限に収まらない稀なケースでは固定ハフマンへフォールバックします
+- 学習目的の実装であり、速度最適化はしていません
+- LZ77 はナイーブ探索です
+- 動的ハフマン生成は簡易実装のため、符号長制限に収まらない場合は固定ハフマンへフォールバックします
 - ZIP64 / 暗号化 / 一部拡張仕様は未対応です
