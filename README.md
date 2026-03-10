@@ -168,34 +168,6 @@ pytest -q
 - data descriptor 付き ZIP の互換読み込み
 - 中央ディレクトリオフセット整合性
 
-## リポジトリ作成とリリース
-
-### 1. 初期化とコミット
-
-```powershell
-git init
-git add .
-git commit -m "feat: educational ZIP/Deflate implementation with PySide6 GUI"
-```
-
-### 2. GitHub リポジトリ作成
-
-`gh` を使う例:
-
-```powershell
-gh repo create zip-edu --public --source . --remote origin --push
-```
-
-### 3. リリース作成
-
-```powershell
-git tag v0.1.0
-git push origin v0.1.0
-
-# exe を添付する例
-gh release create v0.1.0 dist/zip-edu-gui.exe dist/zip-edu-cli.exe -t "v0.1.0" -n "Initial release"
-```
-
 ## 注意
 
 - 自学目的の実装であり、速度最適化はしていません（LZ77 はナイーブ探索）
